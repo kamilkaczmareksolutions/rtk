@@ -3,6 +3,15 @@ name: PR Target Branch Check
 on:
   pull_request_target:
     types: [opened, edited]
+  # Same-repo PRs (incl. Dependabot) need this so a workflow fix on the
+  # PR branch can report check-target without waiting for a merge to master.
+  # pull_request_target always executes the base-branch copy.
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  issues: write
+  pull-requests: write
 
 jobs:
   check-target:
@@ -17,17 +26,15 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ['wrong-base']
+              });
 
-            // Add label
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: ['wrong-base']
-            });
-
-            // Post comment
-            const body = `👋 Thanks for the PR! It looks like this targets \`master\`, but all PRs should target the **\`develop\`** branch.
+              const body = `👋 Thanks for the PR! It looks like this targets \`master\`, but all PRs should target the **\`develop\`** branch.
 
             Please update the base branch:
             1. Click **Edit** at the top right of this PR
@@ -35,9 +42,13 @@ jobs:
 
             See [CONTRIBUTING.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/CONTRIBUTING.md) for details.`;
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              body: body
-            });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: body
+              });
+            } catch (error) {
+              // Repo default GITHUB_TOKEN is read-only; do not fail the check on 403.
+              core.warning(`Unable to add wrong-base label/comment: ${error.message}`);
+            }
