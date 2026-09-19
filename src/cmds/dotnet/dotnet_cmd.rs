@@ -599,7 +599,7 @@ fn scan_mtp_kind_in_file(path: &Path) -> MtpProjectKind {
             }
             Ok(Event::Text(e)) => {
                 if inside_mtp_element {
-                    if let Ok(text) = e.unescape() {
+                    if let Ok(text) = e.xml10_content() {
                         if text.trim().eq_ignore_ascii_case("true") {
                             return MtpProjectKind::VsTestBridge;
                         }
